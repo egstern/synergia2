@@ -68,6 +68,8 @@ def create_propagator(lattice):
     return propagator
 
 
+#---------------------------------------------------------------------------
+
 def test_modify_lattice(prop_fixture):
     propagator = prop_fixture
     lattice = propagator.get_lattice()
@@ -90,6 +92,8 @@ def test_modify_lattice(prop_fixture):
     assert propagator.get_lattice().get_elements()[0].get_double_attribute('foo') == 31.25
     #assert False
 
+#---------------------------------------------------------------------------
+
 def test_modify_lattice_energy(prop_fixture):
     propagator = prop_fixture
     lattice = propagator.get_lattice()
@@ -111,6 +115,8 @@ def test_modify_lattice_energy(prop_fixture):
 
     assert propagator.get_lattice().get_lattice_energy() == 8.25
     #assert False
+
+#---------------------------------------------------------------------------
 
 # this test activates a context class that can maintain separate state but is accessible within the
 # prop_action. This test will increment a counter for odd numbered turns.
@@ -140,10 +146,47 @@ def test_context(prop_fixture):
     assert context.odd_turn_count == 2
     #assert False
 
+#---------------------------------------------------------------------------
+
+#Test that modifying the lattice energy sticks and is reflected inside
+# the turn_and action
+
+def test_modify_lattice_energy2(prop_fixture):
+    propagator = prop_fixture
+    lattice = propagator.get_lattice()
+    E0 = lattice.get_lattice_energy()
+    sim = create_simulator(lattice.get_reference_particle())
+
+    class context:
+        turn_energy = []
+
+    # turn and action method
+    def turn_end_action(sim, lattice, turn):
+        bunch = sim.get_bunch()
+        bunch_E = bunch.get_reference_particle().get_total_energy()
+        bunch.get_design_reference_particle().set_total_energy(bunch_E)
+        lattice.set_lattice_energy(bunch_E)
+        context.turn_energy.append(lattice.get_lattice_energy())
+    # end of turn end action method
+
+    sim.reg_prop_action_turn_end(turn_end_action)
+
+    simlog = synergia.utils.parallel_utils.Logger(0, synergia.utils.parallel_utils.LoggerV.INFO_TURN, False)
+    propagator.propagate(sim, simlog, 10)
+
+    print('turn energy: ', context.turn_energy)
+    # Did the energy actually increase?
+    for i in range(10):
+        E1 = context.turn_energy[i]
+        # check energy steps for each turn
+        assert E1-E0 == pytest.approx(expected_delta_E)
+        E0 = E1
+
+#---------------------------------------------------------------------------
 
 def main():
     pf = prop_fixture()
-    test_accel1(pf)
+    test_modify_lattice_energy2(pf)
 
 if __name__ == "__main__":
     main()
